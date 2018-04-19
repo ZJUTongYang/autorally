@@ -568,10 +568,16 @@ class AutoRallyCtrlr(object):
     self.wheelSpeedFront = (ws.lfSpeed+ws.rfSpeed)/2.0
     
     #published speeds can't be negative so data mimics the physical platform
-    ws.lfSpeed = abs(ws.lfSpeed)
-    ws.rfSpeed = abs(ws.rfSpeed)
-    ws.lbSpeed = abs(self.getWheelSpeed(data, self.left_rear_name, self.left_rear_dia))
-    ws.rbSpeed = abs(self.getWheelSpeed(data, self.right_rear_name, self.right_rear_dia))
+#    ws.lfSpeed = abs(ws.lfSpeed)
+#    ws.rfSpeed = abs(ws.rfSpeed)
+#    ws.lbSpeed = abs(self.getWheelSpeed(data, self.left_rear_name, self.left_rear_dia))
+#    ws.rbSpeed = abs(self.getWheelSpeed(data, self.right_rear_name, self.right_rear_dia))
+    
+    #YT try to be negative
+    ws.lfSpeed = ws.lfSpeed
+    ws.rfSpeed = ws.rfSpeed
+    ws.lbSpeed = self.getWheelSpeed(data, self.left_rear_name, self.left_rear_dia)
+    ws.rbSpeed = self.getWheelSpeed(data, self.right_rear_name, self.right_rear_dia)
     
     if self.wheelSpeedsPub:
       self.wheelSpeedsPub.publish(ws)

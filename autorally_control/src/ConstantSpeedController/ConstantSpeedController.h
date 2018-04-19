@@ -45,6 +45,10 @@
 #include <autorally_msgs/chassisCommand.h>
 #include <autorally_msgs/wheelSpeeds.h>
 #include <autorally_core/RingBuffer.h>
+#include "autorally_msgs/runstop.h"
+#include <sensor_msgs/JointState.h>
+#include <gazebo_msgs/ModelStates.h>
+#include <ackermann_msgs/AckermannDriveStamped.h>
 
 namespace autorally_control
 {
@@ -68,9 +72,14 @@ class ConstantSpeedController : public nodelet::Nodelet
   SpeedControllerState m_controllerState;
   ros::Subscriber m_speedCommandSub;
   ros::Subscriber m_wheelSpeedsSub;
+  ros::Subscriber yt_jointstateSub;
+//  ros::Subscriber yt_steeringSub;
+  ros::Subscriber yt_move_base_runstopSub;
   ros::Publisher m_chassisCommandPub; ///<Publisher for chassisCommands
-  ros::Timer m_controlTimer;
-  ros::Timer m_controlEnableTimer;
+  ros::Publisher yt_robotvelfromwheelPub;//YT from sensor data
+  std_msgs::Float64 robotvelfromwheel_buf, robotvelfromwheel_buf_buf;
+  ros::Publisher yt_robotsteerPub;//YT fron sensor data
+  ros::Publisher yt_robotsteersetpointPub;//YT change from -1~1 to -0.2~0.2
   std::string m_speedCommander;
 
   double m_constantSpeedPrevThrot; ///< Difference between desired and actual velocity from previous iteration
@@ -79,32 +88,56 @@ class ConstantSpeedController : public nodelet::Nodelet
   double m_constantSpeedKI; ///< Scaler for the integral component
   double m_constantSpeedIMax; ///< Maximum Integral Error
   double m_integralError;
-//  double m_throttleOffset;
-//  double m_safeSpeedMultiplier;
+
 
   bool m_controlEnabled;
   double m_accelerationRate;
   double m_frontWheelsSpeed;
   double m_backWheelsSpeed;
-  std_msgs::Float64 m_mostRecentSpeedCommand;
+  double m_lfSpeed;
+  double m_lbSpeed;
+  double m_rfSpeed;
+  double m_rbSpeed;
+
+
+  ackermann_msgs::AckermannDriveStamped m_mostRecentSpeedCommand;
+
   double m_speedSetPoint;
   double m_throttleAccStart;
   double m_throttleAccEnd;
   ros::Time m_accelerationStartTime;
   double m_accelerationDuration;
+  double m_steering_rad;//YT rad value of turning left(+) and right(-)
+//  double m_linear_v;
+//  double m_angular_z;
+
+  ///variable for stop when no command
+  ros::Duration* overtime;
+  ros::Time current;
+  ros::Time last;
+
+  bool yt_publish_enabled;
 
   autorally_core::RingBuffer<double> m_throttleMappings;
-  std::vector<double> m_accelerationProfile;
-  void speedCallback(const std_msgs::Float64ConstPtr& msg);
+//  std::vector<double> m_accelerationProfile;
+
+  void cmdvelCallback(const geometry_msgs::Twist& msg);
   void wheelSpeedsCallback(const autorally_msgs::wheelSpeedsConstPtr& msg);
+//  void ytmodelstateCallback(const gazebo_msgs::ModelStatesConstPtr& msg);
+  void ytrunstopCallback(const autorally_msgs::runstop::ConstPtr& msg);
+  void ytjointstateCallback(const sensor_msgs::JointStateConstPtr& msg);
 
   void enableControlCallback(const ros::TimerEvent& time);
   void controlCallback(const ros::TimerEvent& time);
 
-  std::vector<double> generateAccelerationProfile(const int count);
-  void loadThrottleCalibration();
+//  std::vector<double> generateAccelerationProfile(const int count);
+//  void loadThrottleCalibration();
+  double max_steering_acc_degree;//YT assume that 1 degree per command is ok
 
+  double max_turning_angle_degree;
+  double wheelbase;//YT the distance between front wheel and rear wheel
 };
+
 
 }
 #endif 

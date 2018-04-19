@@ -32,7 +32,7 @@ install(TARGETS
 #Now build the CUDA executables (only if CUDA is installed)
 ################################################################################
 
-find_package(CUDA)
+# find_package(CUDA)
 if(CUDA_FOUND)
 
 include(FindCUDA)

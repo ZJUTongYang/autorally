@@ -1,3 +1,4 @@
+<?xml version="1.0"?>
 <launch>
 
   <!-- these are the arguments you can pass this launch file, for example paused:=true -->
@@ -30,16 +31,17 @@
   <!-- start gazebo server-->
   <node name="gazebo" pkg="gazebo_ros" type="$(arg script_type)" respawn="false" output="screen"
 	args="$(arg command_arg1) $(arg command_arg2) $(arg command_arg3) -e $(arg physics) $(arg extra_gazebo_args) $(arg world_name)" />
-	
+
   <!-- start gazebo client -->
-  <group if="$(arg gui)">
+<group if="$(arg gui)">
     <node name="gazebo_gui" pkg="gazebo_ros" type="gzclient" respawn="false" output="screen"/>
   </group>
 
+<!--
   <node name="spawn_track" pkg="gazebo_ros" type="spawn_model"
         args="-file $(find autorally_description)/urdf/autoRallyTrack.urdf -urdf -model track
               -gazebo_namespace /$(arg namespace)/gazebo
               -x 0 -y 0 -z 0.0762
               -R 0 -P 0 -Y 0.785398"/>
-
+-->
 </launch>

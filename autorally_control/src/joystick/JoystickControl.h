@@ -76,19 +76,20 @@ class JoystickControl
    * @param joy the message received from ros comms
    */
   void joyCallback(const sensor_msgs::Joy::ConstPtr& joy);
+  void yt_runstopCallback(const autorally_msgs::runstop::ConstPtr& msg);
 
-  void runstopCallback(const ros::TimerEvent& time);
+  //void runstopCallback(const ros::TimerEvent& time);
 
   ros::Subscriber m_joySub; ///< Channel to receive joystick state
+  ros::Subscriber yt_runstopSub;
   ros::Publisher commandPub_; ///< publisher for chassis commands
-  ros::Publisher runstopPub_; ///< publisher for runstop commands
-  ros::Timer runstopTimer_;
+
+  //ros::Timer runstopTimer_;
 
  private:
   ros::NodeHandle nh_;
 
   autorally_msgs::chassisCommand chassis_command_; ///< command message
-  autorally_msgs::runstop runstop_; ///< command message
   double throttleDamping_;
   double steeringDamping_;
   
@@ -97,12 +98,14 @@ class JoystickControl
   bool throttleBrakePaired_;
   bool frontBrake_;
 
+  bool yt_runstopEnabled_;
+
   int throttleAxis_;
   int steeringAxis_;
   int brakeAxis_;
   int throttleEnableButton_;
   int steeringEnableButton_;
-  std::vector<int> runstopToggleButtons_;
+  //std::vector<int> runstopToggleButtons_;
   sensor_msgs::Joy prevJoy_;
 };
 

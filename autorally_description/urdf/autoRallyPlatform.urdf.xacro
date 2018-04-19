@@ -398,7 +398,7 @@ limitations under the License.
     <parent link="base_link"/>
     <child link="chassis"/>
   </joint>
-
+<!--
   <link name="imu_link">
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -426,15 +426,15 @@ limitations under the License.
     <parent link="base_link"/>
     <child link="camera_link"/>
   </joint>
-
+-->
   <!-- Camera -->
-  <link name="camera_link">
+<!--  <link name="camera_link">
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
     <box size="0.02 0.02 0.02"/>
       </geometry>
-    </collision>
+    </collision>-->
 <!--
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -444,7 +444,7 @@ limitations under the License.
       <material name="red"/>
     </visual>
 -->
-    <inertial>
+ <!--   <inertial>
       <mass value="1e-5" />
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6" />
@@ -459,9 +459,9 @@ limitations under the License.
     <parent link="base_link"/>
     <child link="side_camera_link"/>
   </joint>
-
+-->
   <!-- Camera -->
-  <link name="side_camera_link">
+ <!-- <link name="side_camera_link">-->
     <!-- <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -477,20 +477,65 @@ limitations under the License.
       <material name="red"/>
     </visual>
     -->
-    <inertial>
+<!--    <inertial>
       <mass value="1e-5" />
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6" />
     </inertial>
-  </link>
+  </link>-->
 
 
 
+<link name = "laser_link">
+  <inertial>
+    <mass value = "1e-5"/>
+    <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6" />
+  </inertial>
+</link>
+ <joint name = "laser_joint" type = "fixed">
+    <axis xyz="0 0 0" />
+    <origin xyz="0 0 0.25" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="laser_link"/>
+  </joint>
+
+
+<gazebo reference = "laser_link">
+  <sensor name = "laser_sensor" type = 'ray'>
+    <ray>
+      <scan>
+        <horizontal>
+          <samples>360</samples>
+          <resolution>1</resolution>
+          <min_angle>-3.14</min_angle>
+          <max_angle>3.14</max_angle>
+        </horizontal>
+        <vertical>
+          <samples>1</samples>
+          <min_angle>-0.1</min_angle>
+          <max_angle>-0.35</max_angle>
+        </vertical>
+      </scan>
+      <range>
+        <min>0.3</min>
+        <max>25</max>
+        <resolution>0.01</resolution>
+      </range>
+    </ray>
+    <plugin name = 'laser' filename = 'libgazebo_ros_laser.so'>
+      <topicName>/ytscan</topicName>
+      <frameName>laser_link</frameName>
+    </plugin>
+    <always_on>1</always_on>
+    <update_rate>30</update_rate>
+    <visualize>1</visualize>
+  </sensor>
+</gazebo>
 
 
 
   <!-- camera -->
-  <gazebo reference="camera_link">
+ <!-- <gazebo reference="camera_link">
     <sensor type="multicamera" name="stereo_camera">
       <update_rate>30.0</update_rate>
       <camera name="left">
@@ -535,21 +580,21 @@ limitations under the License.
         <cameraName>camera</cameraName>
         <imageTopicName>image_raw</imageTopicName>
         <cameraInfoTopicName>camera_info</cameraInfoTopicName>
-        <frameName>left_camera_optical_frame</frameName>
+        <frameName>left_camera_optical_frame</frameName>-->
         <!--<rightFrameName>right_camera_optical_frame</rightFrameName>-->
-        <hackBaseline>0.14</hackBaseline>
+        <!--<hackBaseline>0.14</hackBaseline>-->
         <!-- <distortionK1>-0.212652</distortionK1>
         <distortionK2>0.085434</distortionK2>
         <distortionK3>-0.000165</distortionK3>
         <distortionT1>-0.000336</distortionT1>
         <distortionT2>0.0</distortionT2> -->
-      </plugin>
+<!--      </plugin>
     </sensor>
-  </gazebo>
+  </gazebo>-->
 
 
    <!-- camera -->
-  <gazebo reference="side_camera_link">
+<!--  <gazebo reference="side_camera_link">
     <sensor type="camera" name="camera_side">
       <update_rate>30.0</update_rate>
       <camera name="side">
@@ -564,11 +609,11 @@ limitations under the License.
           <far>50</far>
         </clip>
         <noise>
-          <type>gaussian</type>
+          <type>gaussian</type>-->
           <!-- Noise is sampled independently per pixel on each frame.
                That pixel's noise value is added to each of its color
                channels, which at that point lie in the range [0,1]. -->
-          <mean>0.0</mean>
+  <!--        <mean>0.0</mean>
           <stddev>0.007</stddev>
         </noise>
       </camera>
@@ -579,16 +624,16 @@ limitations under the License.
         <imageTopicName>image_raw</imageTopicName>
         <cameraInfoTopicName>camera_info</cameraInfoTopicName>
         <frameName>side_camera_link</frameName>
-        <hackBaseline>0.07</hackBaseline>
+        <hackBaseline>0.07</hackBaseline>-->
         <!-- <distortionK1>0.0</distortionK1>
         <distortionK2>0.0</distortionK2>
         <distortionK3>0.0</distortionK3>
         <distortionT1>0.0</distortionT1>
         <distortionT2>0.0</distortionT2> -->
-      </plugin>
+<!--      </plugin>
     </sensor>
   </gazebo>
-
+-->
 
 
 
@@ -620,7 +665,7 @@ limitations under the License.
       <robotSimType>gazebo_ros_control/DefaultRobotHWSim</robotSimType>
     </plugin>
     
-    <plugin name="imu" filename="libhector_gazebo_ros_imu.so">
+ <!--   <plugin name="imu" filename="libhector_gazebo_ros_imu.so">
       <robotNamespace>/autorally_platform</robotNamespace>
       <serviceName>/imu/calibrate</serviceName>
       <updateRate>200.0</updateRate>
@@ -654,7 +699,7 @@ limitations under the License.
       <gaussianNoise>0.0001 0.0001 0.0001</gaussianNoise>
       <velocityDrift>0 0 0</velocityDrift>
       <velocityGaussianNoise>0.005 0.005 0.05</velocityGaussianNoise>
-    </plugin>
+    </plugin>-->
     <!-- <plugin name="tire_friction" filename="libTireFrictionPlugin.so">
       <link_name>left_rear_wheel</link_name>
       <collision_name>collision</collision_name>

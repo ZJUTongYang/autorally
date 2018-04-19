@@ -44,15 +44,12 @@ JoystickControl::JoystickControl():
 {
   m_joySub = nh_.subscribe("joy", 1, &JoystickControl::joyCallback, this);
 
+  yt_runstopSub = nh_.subscribe("yt_joystick_runstop", 1, &JoystickControl::yt_runstopCallback, this);
+
   commandPub_ = nh_.advertise
                  <autorally_msgs::chassisCommand>
                  ("joystick/chassisCommand", 1);
-  runstopPub_ = nh_.advertise
-                 <autorally_msgs::runstop>
-                 ("runstop", 1);
 
-  runstop_.sender = "joystick";
-  runstop_.motionEnabled = false;
 
   if(!nh_.getParam("joystickController/throttleDamping", throttleDamping_) ||
      !nh_.getParam("joystickController/steeringDamping", steeringDamping_) || 
@@ -60,26 +57,24 @@ JoystickControl::JoystickControl():
      !nh_.getParam("joystickController/steeringAxis", steeringAxis_) ||
      !nh_.getParam("joystickController/throttleEnableButton", throttleEnableButton_) ||
      !nh_.getParam("joystickController/steeringEnableButton", steeringEnableButton_) ||
-     !nh_.getParam("joystickController/brakeAxis", brakeAxis_) )
+     !nh_.getParam("joystickController/brakeAxis", brakeAxis_)
+     )
   {
     ROS_ERROR_STREAM("Couldn't get joystick control parameters");
   }
-
-  XmlRpc::XmlRpcValue v;
-  nh_.param("joystickController/runstopToggleButtons", v, v);
-  for(int i =0; i < v.size(); i++)
-  {
-    runstopToggleButtons_.push_back(v[i]);
-  }
-
-  runstopTimer_ = nh_.createTimer(ros::Rate(5),
-                                   &JoystickControl::runstopCallback,
-                                   this);
 
 }
 
 JoystickControl::~JoystickControl()
 {}
+
+
+void JoystickControl::yt_runstopCallback(const autorally_msgs::runstop::ConstPtr& msg)
+{
+  yt_runstopEnabled_ = msg->motionEnabled;
+}
+
+
 
 void JoystickControl::joyCallback(const sensor_msgs::Joy::ConstPtr& joy)
 {
@@ -89,7 +84,7 @@ void JoystickControl::joyCallback(const sensor_msgs::Joy::ConstPtr& joy)
    * is drives as expected.
    */
 
-  //toggle runstop if a runstop toggle button changed from 0 to 1  
+/*  //toggle runstop if a runstop toggle button changed from 0 to 1
   for(auto vecIt : runstopToggleButtons_)
   {
     if(joy->buttons[vecIt] == 1 && prevJoy_.buttons[vecIt] == 0)
@@ -97,6 +92,7 @@ void JoystickControl::joyCallback(const sensor_msgs::Joy::ConstPtr& joy)
       runstop_.motionEnabled = !runstop_.motionEnabled;
     }
   }
+*/
 
   //can enable/disable throttle control with L2 on game pad, only toggle if button changed from 0 to 1
   if(joy->buttons[throttleEnableButton_] == 1 && prevJoy_.buttons[throttleEnableButton_] == 0)
@@ -140,11 +136,7 @@ void JoystickControl::joyCallback(const sensor_msgs::Joy::ConstPtr& joy)
   chassis_command_.header.frame_id = "joystick";
   chassis_command_.sender = "joystick";
   chassis_command_.header.stamp = ros::Time::now();
-  commandPub_.publish(chassis_command_);
+  if(yt_runstopEnabled_)
+    commandPub_.publish(chassis_command_);
 }
 
-void JoystickControl::runstopCallback(const ros::TimerEvent& time)
-{
-  runstop_.header.stamp = ros::Time::now();
-  runstopPub_.publish(runstop_);
-}
