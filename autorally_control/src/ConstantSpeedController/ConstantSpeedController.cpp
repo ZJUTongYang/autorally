@@ -29,13 +29,12 @@
  * @date April 14, 2014
  * @copyright 2014 Georgia Institute of Technology
  * @brief Controller to drive robot at constant speed
- *
+ *cycle
  * @details ComstantSpeed Controller class implementation
  ***********************************************/
 
 #include <math.h>
 #include <pluginlib/class_list_macros.h>
-
 #include "ConstantSpeedController.h"
 #include "autorally_msgs/runstop.h"
 #include <sensor_msgs/JointState.h>
@@ -52,11 +51,7 @@ namespace autorally_control
 {
 
 ConstantSpeedController::ConstantSpeedController():
-  m_controllerState(DISABLED),
   m_constantSpeedPrevThrot(0.0),
-  m_controlEnabled(true),
-  m_frontWheelsSpeed(0.0),
-  m_backWheelsSpeed(0.0),
   m_integralError(0.0)
 {}
 
@@ -66,17 +61,22 @@ ConstantSpeedController::~ConstantSpeedController()
 void ConstantSpeedController::onInit()
 {
   NODELET_INFO("ConstantSpeedController initialization");
+  max_delta_v_per_second = 0.5;
+  period_in_second = 0.01;//YT maybe not true, but it will be adjusted through cycle
   max_turning_angle_degree = 20;
   max_steering_acc_degree = 5;
+  max_delta_v_per_second = 0.5;//YT m/s
+  throttle_acceleration_map_.max_throttle = 0.3;
+  throttle_acceleration_map_.min_throttle = 0;
+  throttle_acceleration_map_.throttle_factor = 1;
   wheelbase = 0.57;
   robotvelfromwheel_buf.data = 0;
   robotvelfromwheel_buf_buf.data = 0;
   ros::NodeHandle nh = getNodeHandle();
   ros::NodeHandle nhPvt = getPrivateNodeHandle();
   overtime = new ros::Duration(0.5);//500ms
-  last = ros::Time::now();
-  current = ros::Time::now();
-//  loadThrottleCalibration();
+  overtime_last = ros::Time::now();
+  overtime_current = ros::Time::now();
 
   m_mostRecentSpeedCommand.drive.speed = 0;
 
@@ -93,10 +93,7 @@ void ConstantSpeedController::onInit()
   yt_robotvelfromwheelPub = nh.advertise<std_msgs::Float64>("constantSpeedController/yt_robotvelfromwheel", 1);
   yt_robotsteerPub = nh.advertise<std_msgs::Float64>("constantSpeedController/yt_robotsteer", 1);
   yt_robotsteersetpointPub = nh.advertise<std_msgs::Float64>("constantSpeedController/robotsteersetpoint", 1);
-  if(!nhPvt.getParam("speedCommander", m_speedCommander) ||
-     !nhPvt.getParam("accelerationRate", m_accelerationRate) ||
-     !nhPvt.getParam("accelerationRate", m_accelerationRate) ||
-     !nhPvt.getParam("KP", m_constantSpeedKP) ||
+  if(!nhPvt.getParam("KP", m_constantSpeedKP) ||
      !nhPvt.getParam("KD", m_constantSpeedKD) ||
      !nhPvt.getParam("KI", m_constantSpeedKI) ||
      !nhPvt.getParam("IMax", m_constantSpeedIMax))
@@ -110,113 +107,63 @@ void ConstantSpeedController::onInit()
 
 void ConstantSpeedController::cmdvelCallback(const geometry_msgs::Twist& msg)
 {
-    last = ros::Time::now();
+    overtime_last = ros::Time::now();
     m_mostRecentSpeedCommand.drive.steering_angle = -std::atan(msg.angular.z*wheelbase/msg.linear.x);//rad
-
-//    if((m_mostRecentSpeedCommand.drive.speed - msg.linear.x >= 0.02))
-//    {
-//        NODELET_INFO_STREAM("ConstantSpeedController: new speed setpoint: [" << msg.linear.x << ", " << msg.angular.z << "]");
-//    }
     m_mostRecentSpeedCommand.drive.speed = msg.linear.x;
 }
 
 void ConstantSpeedController::wheelSpeedsCallback(const autorally_msgs::wheelSpeedsConstPtr& msg)
 {
     static int i = 0;
-    m_lfSpeed = msg->lfSpeed;
-    m_rfSpeed = msg->rfSpeed;
-    m_lbSpeed = msg->lbSpeed;
-    m_rbSpeed = msg->rbSpeed;
 
-  m_backWheelsSpeed = 0.5*(msg->lbSpeed + msg->rbSpeed);
+    m_currentrobotstate.drive.speed = 0.5*(msg->lbSpeed + msg->rbSpeed);
 
-  std_msgs::Float64 temp;
+    std_msgs::Float64 temp;
 
-  //YT output the robot velocity
-  temp.data = (m_backWheelsSpeed + robotvelfromwheel_buf.data + robotvelfromwheel_buf_buf.data)/3;
-  yt_robotvelfromwheelPub.publish(temp);
-  robotvelfromwheel_buf_buf.data = robotvelfromwheel_buf.data;
-  robotvelfromwheel_buf.data = temp.data;
+    //YT output the robot velocity with moving average method
+    temp.data = (m_currentrobotstate.drive.speed + robotvelfromwheel_buf.data + robotvelfromwheel_buf_buf.data)/3;
+    yt_robotvelfromwheelPub.publish(temp);
+    robotvelfromwheel_buf_buf.data = robotvelfromwheel_buf.data;
+    robotvelfromwheel_buf.data = temp.data;
 
-  autorally_msgs::chassisCommandPtr command(new autorally_msgs::chassisCommand);
-  command->header.stamp = ros::Time::now();
-  command->header.frame_id = "joystick";
-  command->sender = "joystick";
+    autorally_msgs::chassisCommandPtr command(new autorally_msgs::chassisCommand);
+    command->header.stamp = ros::Time::now();
+    command->header.frame_id = "joystick";
+    command->sender = "joystick";
 
-  /// YT
-  /// command->steering:left(-1), right(+1)
-  /// m_mostRecentSpeedCommand: left(-maxrad), right(+maxrad)
-  /// m_steering_rad: left(+currentrad), right(-currentrad), should be toggled
-  /// but the function speedCallback() can only calculate the steering angle of front wheel,
-  /// so we must saturate the steering angle
+    /// YT
+    /// command->steering:left(-1), right(+1)
+    /// m_mostRecentSpeedCommand: left(-maxrad), right(+maxrad)
+    /// m_steering_rad: left(+currentrad), right(-currentrad), should be toggled
+    /// but the function speedCallback() can only calculate the steering angle of front wheel,
+    /// so we must saturate the steering angle
 
-  double current_steer_rad = -m_steering_rad;//left(-),right(+)
+    temp.data = m_currentrobotstate.drive.steering_angle;
+    yt_robotsteerPub.publish(temp);
 
-  temp.data = -m_steering_rad;
-  yt_robotsteerPub.publish(temp);
+    steeringCB(command);
 
-   if((m_mostRecentSpeedCommand.drive.steering_angle - current_steer_rad) * 180/PI > max_steering_acc_degree )//should turn right more
-   {
-       //NODELET_INFO_STREAM("YT: should turn right more");
-       command->steering = current_steer_rad *180/PI + max_steering_acc_degree;
-   }
-    else if ((m_mostRecentSpeedCommand.drive.steering_angle - current_steer_rad) * 180/PI < -max_steering_acc_degree )//should turn left more
-   {
-       //NODELET_INFO_STREAM("YT: should turn left more");
-        command->steering = current_steer_rad *180/PI - max_steering_acc_degree;
-   }
-   else
-   {
-       command->steering = m_mostRecentSpeedCommand.drive.steering_angle *180/PI;
-   }
+    throttleCB(command);
 
-    if(fabs( command->steering )> 20)
-        command->steering = command->steering / fabs( command->steering );
-    else
-        command->steering = command->steering / 20;
+    overtimeCB(command);
 
-  command->frontBrake = 0.0;
+    ///YT divide the publish frequency
+    i++;
+    if(i > 4)i -= 3;
+    if( yt_publish_enabled && (i % 3 == 0))
+    {
+        m_chassisCommandPub.publish(command);
 
 
 
-if(yt_publish_enabled)
-{
+        //YT refresh the observation of control period
+        period_in_second = (ros::Duration(ros::Time::now() - calculate_period_last)).toSec();
+        calculate_period_last = ros::Time::now();
+    }
 
-    //YT PI control loop
-      m_integralError += m_mostRecentSpeedCommand.drive.speed - m_backWheelsSpeed;
-      if (m_integralError > (m_constantSpeedIMax / m_constantSpeedKI))
-      {
-        m_integralError = (m_constantSpeedIMax / m_constantSpeedKI);
-      }
-
-      if (m_integralError < -(m_constantSpeedIMax / m_constantSpeedKI))
-      {
-        m_integralError = -(m_constantSpeedIMax / m_constantSpeedKI);
-      }
-
-      command->throttle =
-                 m_constantSpeedKP*(m_mostRecentSpeedCommand.drive.speed - m_backWheelsSpeed);
-      command->throttle += m_constantSpeedKI * m_integralError;
-      command->throttle = std::max(-1.0, std::min(1.0, command->throttle));
-
-}
-
-
-  current = ros::Time::now();
-  if((current.toSec() - last.toSec() )> overtime->toSec())
-  {
-      command->steering = 0;
-      command->throttle = 0;
-      command->frontBrake = 1;
-  }
-  i++;
-  if(i > 4)i -= 3;
-  if( yt_publish_enabled && (i % 3 == 0))
-  {
-      m_chassisCommandPub.publish(command);
-  }
-  temp.data = command->steering * 0.348;
-  yt_robotsteersetpointPub.publish(temp);
+    ///YT show the setpoint
+    temp.data = command->steering * 0.348;
+    yt_robotsteersetpointPub.publish(temp);
 }
 
 void ConstantSpeedController::ytjointstateCallback(const sensor_msgs::JointStateConstPtr& msg)
@@ -224,45 +171,108 @@ void ConstantSpeedController::ytjointstateCallback(const sensor_msgs::JointState
     ///YT
     /// get steer from modelstate topic
     /// since the simulated car is not purily ackermann
-    m_steering_rad = (msg->position.at(4) + msg->position.at(9))/2;
-//    std::cout << "YT: the m_steering_rad is: " << m_steering_rad/3.14*180 << std::endl;
+    //YT: we should toggle the sign here
+    m_currentrobotstate.drive.steering_angle = -(msg->position.at(4) + msg->position.at(9))/2;
 }
 
 void ConstantSpeedController::ytrunstopCallback(const autorally_msgs::runstop::ConstPtr& msg)
 {
-  yt_publish_enabled = msg->motionEnabled;
+    yt_publish_enabled = msg->motionEnabled;
+}
+
+void ConstantSpeedController::throttleCB(autorally_msgs::chassisCommandPtr command)
+{
+    command->frontBrake = 0.0;
+    double delta_v_between_command_and_state = m_mostRecentSpeedCommand.drive.speed - m_currentrobotstate.drive.speed;
+
+    double acc;
+
+    //saturate the acceleration
+    if( delta_v_between_command_and_state > (max_delta_v_per_second * period_in_second) )
+    {
+        m_currentCommandSetPoint.drive.speed = m_currentrobotstate.drive.speed + max_delta_v_per_second * period_in_second;
+        acc = max_delta_v_per_second * period_in_second;
+    }
+    else if( delta_v_between_command_and_state < -(max_delta_v_per_second * period_in_second) )
+    {
+        m_currentCommandSetPoint.drive.speed = m_currentrobotstate.drive.speed - max_delta_v_per_second * period_in_second;
+        acc = -max_delta_v_per_second * period_in_second;
+    }
+    else
+    {
+        m_currentCommandSetPoint.drive.speed = m_mostRecentSpeedCommand.drive.speed;
+        acc = delta_v_between_command_and_state;
+    }
+
+    ///YT the throttle describes the acceleration, so we need to trace throttle based on delta_v
+    calculateThrottle(command, acc);
 }
 
 
-//void ConstantSpeedController::loadThrottleCalibration()
-//{
-//  NODELET_INFO("Loading calibration");
-//  ros::NodeHandle nhPvt = getPrivateNodeHandle();
-//  XmlRpc::XmlRpcValue v;
-//  nhPvt.param("throttleCalibration", v, v);
-//  std::map<std::string, XmlRpc::XmlRpcValue>::iterator mapIt;
-//  for(mapIt = v.begin(); mapIt != v.end(); mapIt++)
-//  {
-//    if(mapIt->second.getType() == XmlRpc::XmlRpcValue::TypeDouble)
-//    {
-//      std::pair<double, double> toAdd(std::pair<double, double>(
-//                                      boost::lexical_cast<double>(mapIt->first),
-//                                      static_cast<double>(mapIt->second)));
-//      NODELET_INFO_STREAM("ConstantSpeedController added to add mapping " <<
-//                             toAdd.first << ":" << toAdd.second);
-//      if(!m_throttleMappings.update(toAdd))
-//      {
-//        NODELET_ERROR_STREAM("ConstantSpeedController Failed to add mapping " <<
-//                             toAdd.first << ":" << toAdd.second);
-//      }
-//    } else
-//    {
-//      NODELET_ERROR("ConstantSpeedController: XmlRpc throttle calibration formatted incorrectly");
-//    }
-//  }
-//  NODELET_INFO_STREAM("ConstantSpeedController: Loaded " <<
-//                      m_throttleMappings.size() <<
-//                      " throttle mappings");
-//}
+void ConstantSpeedController::steeringCB(autorally_msgs::chassisCommandPtr command)
+{
+    if((m_mostRecentSpeedCommand.drive.steering_angle - m_currentrobotstate.drive.steering_angle) * 180/PI > max_steering_acc_degree )//should turn right more
+    {
+        //NODELET_INFO_STREAM("YT: should turn right more");
+        command->steering = m_currentrobotstate.drive.steering_angle *180/PI + max_steering_acc_degree;
+    }
+     else if ((m_mostRecentSpeedCommand.drive.steering_angle - m_currentrobotstate.drive.steering_angle) * 180/PI < -max_steering_acc_degree )//should turn left more
+    {
+        //NODELET_INFO_STREAM("YT: should turn left more");
+         command->steering = m_currentrobotstate.drive.steering_angle *180/PI - max_steering_acc_degree;
+    }
+    else
+    {
+        command->steering = m_mostRecentSpeedCommand.drive.steering_angle *180/PI;
+    }
+
+    if(fabs( command->steering )> 20)
+        command->steering = command->steering / fabs( command->steering );
+    else
+        command->steering = command->steering / 20;
+}
+
+void ConstantSpeedController::overtimeCB(autorally_msgs::chassisCommandPtr command)
+{
+    ///YT stop moving if we cannot get command
+    overtime_current = ros::Time::now();
+    if((overtime_current.toSec() - overtime_last.toSec() )> overtime->toSec())
+    {
+        command->steering = 0;
+        command->throttle = 0;
+        command->frontBrake = 1;
+    }
+}
+
+void ConstantSpeedController::calculateThrottle(autorally_msgs::chassisCommandPtr command, double acc)
+{
+    double p = throttle_acceleration_map_.getThrottle(acc);
+    if(yt_publish_enabled)
+    {
+        m_integralError += m_currentCommandSetPoint.drive.speed - m_currentrobotstate.drive.speed;
+        if (m_integralError > (m_constantSpeedIMax / m_constantSpeedKI))
+        {
+            m_integralError = (m_constantSpeedIMax / m_constantSpeedKI);
+        }
+        if (m_integralError < -(m_constantSpeedIMax / m_constantSpeedKI))
+        {
+            m_integralError = -(m_constantSpeedIMax / m_constantSpeedKI);
+        }
+        command->throttle =
+                 p + m_constantSpeedKP*(m_currentCommandSetPoint.drive.speed - m_currentrobotstate.drive.speed);
+        command->throttle += m_constantSpeedKI * m_integralError;
+        command->throttle = std::max(-1.0, std::min(1.0, command->throttle));
+    }
+}
+
+double ThrottleAccelerationMap::getThrottle(double acc)
+{
+    return throttle_factor * acc;
+}
+
+double ThrottleAccelerationMap::setThrottle()
+{
 
 }
+
+}//namespace
