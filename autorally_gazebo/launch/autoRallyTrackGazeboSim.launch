@@ -94,6 +94,7 @@ limitations under the License.
 
 <param name="/gps_imu/FixedInitialPose" value = "true"/>
 
+    <node name="rqt_gui" pkg="rqt_gui" type="rqt_gui"/>
 
   </group>
   <include file="$(find autorally_core)/launch/autorally_core_manager.launch" />
